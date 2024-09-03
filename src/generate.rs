@@ -533,7 +533,7 @@ pub enum NormalGenerationMode {
 /// whether this is necessary or appropriate.
 #[derive(Default)]
 pub struct AutoGenerateOutlineNormalsPlugin {
-    generation_mode: NormalGenerationMode,
+    pub generation_mode: NormalGenerationMode,
 }
 
 impl Plugin for AutoGenerateOutlineNormalsPlugin {

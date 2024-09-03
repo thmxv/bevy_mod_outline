@@ -237,11 +237,14 @@ impl SpecializedMeshPipeline for OutlinePipeline {
             let val = ShaderDefVal::from("FLAT_DEPTH");
             vertex_defs.push(val.clone());
             fragment_defs.push(val);
-            cull_mode = Some(Face::Back);
+            //cull_mode = Some(Face::Back);
+            cull_mode = None;
         } else if key.pass_type() == PassType::Stencil {
-            cull_mode = Some(Face::Back);
+            //cull_mode = Some(Face::Back);
+            cull_mode = None;
         } else {
-            cull_mode = Some(Face::Front);
+            //cull_mode = Some(Face::Front);
+            cull_mode = None;
         }
         if key.offset_zero() {
             vertex_defs.push(ShaderDefVal::from("OFFSET_ZERO"));

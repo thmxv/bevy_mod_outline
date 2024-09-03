@@ -14,7 +14,7 @@ fn main() {
         .add_plugins((
             DefaultPlugins,
             OutlinePlugin,
-            AutoGenerateOutlineNormalsPlugin,
+            AutoGenerateOutlineNormalsPlugin::default(),
             AsyncSceneInheritOutlinePlugin,
         ))
         .insert_resource(AmbientLight::default())

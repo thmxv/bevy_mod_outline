@@ -9,6 +9,7 @@ use bevy::{
     },
     utils::{HashMap, HashSet},
 };
+use itertools::Itertools;
 
 use crate::ATTRIBUTE_OUTLINE_NORMAL;
 
@@ -157,10 +158,6 @@ impl OutlineMeshExt for Mesh {
                 v.into(),
             )),
         }?;
-        //let normals = match self.attribute(Mesh::ATTRIBUTE_NORMAL) {
-        //    Some(VertexAttributeValues::Float32x3(p)) => Some(p),
-        //    _ => None,
-        //};
         let mut it = IndexIterator::from(&*self);
         let mut edges_map =
             HashMap::<([FloatOrd; 3], [FloatOrd; 3]), Vec<(usize, usize, usize)>>::with_capacity(
@@ -197,8 +194,7 @@ impl OutlineMeshExt for Mesh {
                 edge_faces.push((j0, j1, j2));
             }
         }
-        let mut new_quad_faces = Vec::<(usize, usize, Vec3, Vec3)>::new();
-        let mut non_manifold_map = HashMap::<[FloatOrd; 3], Vec3>::new();
+        let mut new_quad_faces = Vec::<(usize, usize, Vec3)>::new();
         for edge_faces in edges_map.values() {
             if edge_faces.len() == 1 {
                 let (j0, j1, j2) = edge_faces[0];
@@ -208,49 +204,46 @@ impl OutlineMeshExt for Mesh {
                 let face_normal = (p1 - p0).cross(p2 - p0);
                 let edge_direction = p1 - p0;
                 let edge_normal = edge_direction.cross(face_normal).normalize_or_zero();
-                new_quad_faces.push((j0, j1, p0, p1));
-                // Go over both vertices of the edge, the "normal" is not normal
-                // to the face, but depends on the edge direction
-                for p in [p0, p1] {
-                    let n = non_manifold_map
-                        .entry([FloatOrd(p.x), FloatOrd(p.y), FloatOrd(p.z)])
-                        .or_default();
-                    *n += edge_normal;
-                }
+                new_quad_faces.push((j0, j1, edge_normal));
             }
         }
-        //let mut outlines = Vec::with_capacity(positions.len());
-        //for p in positions.iter() {
-        //    let key = [FloatOrd(p[0]), FloatOrd(p[1]), FloatOrd(p[2])];
-        //    let normal = non_manifold_map
-        //        .get(&key)
-        //        .copied()
-        //        .or(map.get(&key).copied());
-        //    //let normal = map.get(&key).copied();
-        //    outlines.push(normal.unwrap_or(Vec3::ZERO).normalize_or_zero().to_array());
-        //}
+        let mut extrude_verts_map = HashMap::<usize, Vec<usize>>::new();
         for new_quad_face in new_quad_faces {
-            // TODO: extrude along edge normal, but add triangular face betwen new faces
-            let (i0, i1, p0, p1) = new_quad_face;
-            let key = [FloatOrd(p0[0]), FloatOrd(p0[1]), FloatOrd(p0[2])];
-            let n0 = non_manifold_map
-                .get(&key)
-                .copied()
-                .unwrap_or(Vec3::ZERO)
-                .normalize_or_zero();
-            let key = [FloatOrd(p1[0]), FloatOrd(p1[1]), FloatOrd(p1[2])];
-            let n1 = non_manifold_map
-                .get(&key)
-                .copied()
-                .unwrap_or(Vec3::ZERO)
-                .normalize_or_zero();
-            add_quad_face_indexed(self, i0, i1, n0, n1);
+            let (i0, i1, normal) = new_quad_face;
+            let (i2, i3) = add_quad_face_indexed(self, i0, i1, normal);
+            let extruded_vec = extrude_verts_map.entry(i0).or_default();
+            extruded_vec.push(i2);
+            let extruded_vec = extrude_verts_map.entry(i1).or_default();
+            extruded_vec.push(i3);
+        }
+        // TODO: Maybe face with other indices order
+        for (i0, extruded) in extrude_verts_map {
+            for (i1, i2) in extruded.iter().copied().tuple_windows() {
+                add_tri_face(self, i0, i1, i2);
+            }
         }
         Ok(())
     }
 }
 
-fn add_quad_face_indexed(mesh: &mut Mesh, i0: usize, i1: usize, n0: Vec3, n1: Vec3) {
+fn add_tri_face(mesh: &mut Mesh, i0: usize, i1: usize, i2: usize) {
+    let indices = mesh.indices_mut();
+    match indices {
+        Some(Indices::U16(indices)) => {
+            indices.push(i0 as u16);
+            indices.push(i1 as u16);
+            indices.push(i2 as u16);
+        }
+        Some(Indices::U32(indices)) => {
+            indices.push(i0 as u32);
+            indices.push(i1 as u32);
+            indices.push(i2 as u32);
+        }
+        None => panic!(),
+    }
+}
+
+fn add_quad_face_indexed(mesh: &mut Mesh, i0: usize, i1: usize, normal: Vec3) -> (usize, usize) {
     let VertexAttributeValues::Float32x3(positions) =
         mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION).unwrap()
     else {
@@ -268,29 +261,11 @@ fn add_quad_face_indexed(mesh: &mut Mesh, i0: usize, i1: usize, n0: Vec3, n1: Ve
     else {
         panic!();
     };
-    outline_normals.push(n0.to_array());
-    outline_normals.push(n1.to_array());
+    outline_normals.push(normal.to_array());
+    outline_normals.push(normal.to_array());
 
-    let indices = mesh.indices_mut();
-    match indices {
-        Some(Indices::U16(indices)) => {
-            indices.push(i1 as u16);
-            indices.push(i0 as u16);
-            indices.push(i3 as u16);
-            indices.push(i0 as u16);
-            indices.push(i2 as u16);
-            indices.push(i3 as u16);
-        }
-        Some(Indices::U32(indices)) => {
-            indices.push(i1 as u32);
-            indices.push(i0 as u32);
-            indices.push(i3 as u32);
-            indices.push(i0 as u32);
-            indices.push(i2 as u32);
-            indices.push(i3 as u32);
-        }
-        None => panic!(),
-    }
+    add_tri_face(mesh, i1, i0, i3);
+    add_tri_face(mesh, i0, i2, i3);
 
     for (attribute_id, attribute) in mesh.attributes_mut() {
         if attribute_id != Mesh::ATTRIBUTE_POSITION.id
@@ -468,6 +443,7 @@ fn add_quad_face_indexed(mesh: &mut Mesh, i0: usize, i1: usize, n0: Vec3, n1: Ve
             }
         }
     }
+    (i2, i3)
 }
 
 fn auto_generate_outline_normals(

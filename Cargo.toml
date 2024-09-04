@@ -23,6 +23,7 @@ interpolation = { version = "0.3", optional = true }
 thiserror = "1.0"
 nonmax = "0.5"
 wgpu-types = "0.20"
+itertools = "0.13"
 
 [features]
 default = ["interpolation"]

@@ -3,12 +3,14 @@ use bevy::{
     scene::SceneInstance,
 };
 
-use bevy_mod_outline::*;
+use bevy_mod_outline::{
+    scene::AsyncSceneInheritOutline, OutlineMeshExt, OutlinePlugin, OutlineVolume,
+    ATTRIBUTE_OUTLINE_NORMAL,
+};
 
 #[bevy_main]
 fn main() {
     App::new()
-        .insert_resource(Msaa::Sample4)
         .insert_resource(ClearColor(Color::BLACK))
         .add_plugins((
             DefaultPlugins,
@@ -25,34 +27,29 @@ fn setup(
     asset_server: Res<AssetServer>,
     mut config_store: ResMut<GizmoConfigStore>,
 ) {
-    commands
-        .spawn(SceneBundle {
-            scene: asset_server.load("non_manifold.glb#Scene0"),
-            ..default()
-        })
-        .insert(OutlineBundle {
-            outline: OutlineVolume {
-                visible: true,
-                width: 3.0,
-                colour: Color::srgb(1.0, 0.0, 0.0),
-            },
-            ..default()
-        })
-        .insert(AsyncSceneInheritOutline);
+    commands.spawn((
+        SceneRoot(asset_server.load("non_manifold.glb#Scene0")),
+        OutlineVolume {
+            visible: true,
+            width: 3.0,
+            colour: Color::srgb(1.0, 0.0, 0.0),
+        },
+        AsyncSceneInheritOutline,
+    ));
 
     // Add light source, and camera
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
+    commands.spawn((
+        PointLight {
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_xyz(4.0, 8.0, 4.0),
-        ..default()
-    });
-    commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 5.0, 14.0).looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    });
+        Transform::from_xyz(4.0, 8.0, 4.0),
+    ));
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 5.0, 14.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Msaa::Sample4,
+    ));
 
     // Config gizmos
     let (config, _) = config_store.config_mut::<DefaultGizmoConfigGroup>();
@@ -64,7 +61,7 @@ fn setup_scene_once_loaded(
     mut commands: Commands,
     scene_query: Query<&SceneInstance>,
     scene_manager: Res<SceneSpawner>,
-    object_query: Query<(Entity, &Name, &Handle<Mesh>)>,
+    object_query: Query<(Entity, &Name, &Mesh3d)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut done: Local<bool>,
 ) {
@@ -75,15 +72,14 @@ fn setup_scene_once_loaded(
                     let mesh = meshes.get_mut(mesh_handle).unwrap();
                     //let _ = mesh.generate_outline_normals();
                     let _ = mesh.modify_for_non_manifold_outlines();
-                    commands.entity(entity).insert(OutlineBundle {
-                        outline: OutlineVolume {
+                    commands.entity(entity).insert((
+                        OutlineVolume {
                             visible: true,
                             colour: Color::WHITE,
                             width: 16.0,
                         },
-                        //mode: OutlineMode::RealVertex,
-                        ..default()
-                    });
+                        //OutlineMode::RealVertex,
+                    ));
                 }
                 *done = true;
             }
@@ -92,7 +88,7 @@ fn setup_scene_once_loaded(
 }
 
 fn draw_normals(
-    object_query: Query<(&GlobalTransform, &Handle<Mesh>), With<OutlineVolume>>,
+    object_query: Query<(&GlobalTransform, &Mesh3d), With<OutlineVolume>>,
     meshes: ResMut<Assets<Mesh>>,
     mut gizmos: Gizmos,
 ) {
@@ -112,7 +108,11 @@ fn draw_normals(
             let (_, rotation, _) = transfrom.to_scale_rotation_translation();
             let normal = 0.2 * Vec3::from_array(*normal);
             let normal = rotation * normal;
-            gizmos.rect(position, rotation, Vec2::splat(0.05), RED_600);
+            gizmos.rect(
+                Isometry3d::new(position, rotation),
+                Vec2::splat(0.05),
+                RED_600,
+            );
             gizmos.ray(position, normal, CYAN_600);
         }
     }

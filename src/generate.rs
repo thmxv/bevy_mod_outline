@@ -267,11 +267,11 @@ fn add_quad_face_indexed(mesh: &mut Mesh, i0: usize, i1: usize, normal: Vec3) ->
     add_tri_face(mesh, i1, i0, i3);
     add_tri_face(mesh, i0, i2, i3);
 
-    for (attribute_id, attribute) in mesh.attributes_mut() {
-        if attribute_id != Mesh::ATTRIBUTE_POSITION.id
-            && attribute_id != ATTRIBUTE_OUTLINE_NORMAL.id
+    for (attribute, attribute_values) in mesh.attributes_mut() {
+        if attribute.id != Mesh::ATTRIBUTE_POSITION.id
+            && attribute.id != ATTRIBUTE_OUTLINE_NORMAL.id
         {
-            match attribute {
+            match attribute_values {
                 VertexAttributeValues::Float32(attribute) => {
                     let a0 = attribute[i0];
                     attribute.push(a0);
